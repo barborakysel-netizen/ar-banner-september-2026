@@ -142,17 +142,17 @@
   <body>
     <div id="start-overlay" class="overlay">
       <div class="panel">
-        <h1>Oživte školský banner</h1>
-        <p>Povoľte prístup ku kamere a namierte mobil na celý obrázok pozvánky.</p>
-        <button id="start-button" type="button">Spustiť AR</button>
-        <p id="message" aria-live="polite"></p>
+        <h1 id="overlay-title">Načítavam AR pozvánku</h1>
+        <p id="overlay-text">Po zobrazení výzvy povoľte prístup ku kamere.</p>
+        <button id="start-button" type="button" hidden>Povoliť kameru</button>
+        <p id="message" aria-live="polite">Spúšťam kameru…</p>
       </div>
     </div>
 
     <div id="guide" hidden>Namierte mobil na celý banner</div>
 
     <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.01; warmupTolerance: 5; missTolerance: 5"
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.0001; filterBeta: 0.01; warmupTolerance: 5; missTolerance: 5"
       embedded
       color-space="sRGB"
       renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
@@ -191,9 +191,14 @@
       const target = document.querySelector("#target");
       const video = document.querySelector("#banner-video");
       const overlay = document.querySelector("#start-overlay");
+      const overlayTitle = document.querySelector("#overlay-title");
+      const overlayText = document.querySelector("#overlay-text");
       const button = document.querySelector("#start-button");
       const message = document.querySelector("#message");
       const guide = document.querySelector("#guide");
+      let starting = false;
+      let started = false;
+      let startTimer;
 
       const waitForScene = () =>
         new Promise((resolve) => {
@@ -201,33 +206,86 @@
           else scene.addEventListener("loaded", resolve, { once: true });
         });
 
-      button.addEventListener("click", async () => {
+      const showFallback = (text) => {
+        clearTimeout(startTimer);
+        starting = false;
+        overlay.hidden = false;
+        overlayTitle.textContent = "Je potrebné povoliť kameru";
+        overlayText.textContent =
+          "Prehliadač zablokoval automatické spustenie. Pokračujte jedným klepnutím.";
+        message.textContent = text;
+        button.textContent = started ? "Spustiť animáciu" : "Povoliť kameru";
+        button.hidden = false;
+        button.disabled = false;
+      };
+
+      const startAR = async (fromUser = false) => {
+        if (starting || started) return;
+        starting = true;
         button.disabled = true;
+        button.hidden = !fromUser;
         message.textContent = "Spúšťam kameru…";
 
         try {
           await waitForScene();
 
-          // Krátke prehratie po dotyku odomkne video aj na iPhone.
-          await video.play();
-          video.pause();
-          video.currentTime = 0;
+          // Stlmené video sa väčšina mobilov pokúsi povoliť automaticky.
+          try {
+            await video.play();
+            video.pause();
+            video.currentTime = 0;
+          } catch (error) {
+            // Ak mobil vyžaduje dotyk, zobrazí sa záložné tlačidlo až neskôr.
+            console.info("Automatické prehrávanie čaká na povolenie používateľa.", error);
+          }
 
-          await scene.systems["mindar-image-system"].start();
-          overlay.hidden = true;
-          guide.hidden = false;
+          scene.systems["mindar-image-system"].start();
+          startTimer = window.setTimeout(() => {
+            if (!started) {
+              showFallback("Kamera sa nespustila automaticky.");
+            }
+          }, 30000);
         } catch (error) {
           console.error(error);
-          message.textContent =
-            "Kameru sa nepodarilo spustiť. Skontrolujte povolenie kamery a otvorte stránku cez HTTPS.";
-          button.disabled = false;
+          showFallback("Kameru sa nepodarilo spustiť automaticky.");
         }
+      };
+
+      scene.addEventListener("arReady", () => {
+        clearTimeout(startTimer);
+        starting = false;
+        started = true;
+        overlay.hidden = true;
+        guide.hidden = false;
+      });
+
+      scene.addEventListener("arError", () => {
+        showFallback("Skontrolujte povolenie kamery a otvorte stránku cez HTTPS.");
+      });
+
+      button.addEventListener("click", async () => {
+        if (started) {
+          button.disabled = true;
+          try {
+            await video.play();
+            overlay.hidden = true;
+          } catch (error) {
+            console.error(error);
+            button.disabled = false;
+            message.textContent = "Prehrávanie sa nepodarilo spustiť.";
+          }
+          return;
+        }
+
+        await startAR(true);
       });
 
       target.addEventListener("targetFound", () => {
         guide.textContent = "Banner rozpoznaný";
         guide.style.opacity = "0";
-        video.play().catch(() => {});
+        video.play().catch(() => {
+          showFallback("Klepnite na tlačidlo a spustite animáciu.");
+        });
       });
 
       target.addEventListener("targetLost", () => {
@@ -235,6 +293,9 @@
         guide.textContent = "Namierte mobil na celý banner";
         guide.style.opacity = "1";
       });
+
+      // Po otvorení odkazu z QR kódu sa AR spustí bez tlačidla na stránke.
+      startAR();
     </script>
   </body>
 </html>
