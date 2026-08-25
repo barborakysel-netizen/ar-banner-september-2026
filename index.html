@@ -25,7 +25,34 @@
         height: 100%;
         margin: 0;
         overflow: hidden;
-        background: #163f2d;
+      }
+
+      html {
+        background: #000;
+      }
+
+      body {
+        position: relative;
+        background: transparent;
+      }
+
+      /* MindAR vloží živý obraz z kamery priamo ako video do body.
+         Musí byť nad pozadím stránky, ale pod priehľadným AR plátnom. */
+      body > video:not(#banner-video) {
+        z-index: 0 !important;
+      }
+
+      a-scene {
+        position: fixed !important;
+        z-index: 1;
+        inset: 0;
+        width: 100vw !important;
+        height: 100dvh !important;
+        background: transparent !important;
+      }
+
+      .a-canvas {
+        background: transparent !important;
       }
 
       .overlay {
@@ -128,7 +155,7 @@
       mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.01; warmupTolerance: 5; missTolerance: 5"
       embedded
       color-space="sRGB"
-      renderer="colorManagement: true; physicallyCorrectLights: true"
+      renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
       loading-screen="enabled: false"
