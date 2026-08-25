@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#163f2d" />
+    <title>AR pozvánka – Súkromná základná škola Senec</title>
+
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #163f2d;
+      }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.16), transparent 40%),
+          linear-gradient(160deg, #245d43, #102f22);
+        color: #fff;
+        text-align: center;
+      }
+
+      .panel {
+        width: min(100%, 420px);
+        padding: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 24px;
+        background: rgba(8, 31, 21, 0.76);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(12px);
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(1.65rem, 7vw, 2.3rem);
+        line-height: 1.08;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.55;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 24px;
+        padding: 15px 20px;
+        border: 0;
+        border-radius: 999px;
+        background: #ffd75e;
+        color: #173d2c;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
+
+      #message {
+        min-height: 1.4em;
+        margin-top: 14px;
+        color: #f5e9b8;
+        font-size: 0.9rem;
+      }
+
+      #guide {
+        position: fixed;
+        z-index: 5;
+        left: 50%;
+        bottom: max(22px, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        width: max-content;
+        max-width: calc(100% - 32px);
+        padding: 11px 16px;
+        border-radius: 999px;
+        background: rgba(10, 32, 23, 0.78);
+        color: #fff;
+        font-size: 0.92rem;
+        text-align: center;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="start-overlay" class="overlay">
+      <div class="panel">
+        <h1>Oživte školský banner</h1>
+        <p>Povoľte prístup ku kamere a namierte mobil na celý obrázok pozvánky.</p>
+        <button id="start-button" type="button">Spustiť AR</button>
+        <p id="message" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <div id="guide" hidden>Namierte mobil na celý banner</div>
+
+    <a-scene
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.01; warmupTolerance: 5; missTolerance: 5"
+      embedded
+      color-space="sRGB"
+      renderer="colorManagement: true; physicallyCorrectLights: true"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+      loading-screen="enabled: false"
+    >
+      <a-assets timeout="15000">
+        <video
+          id="banner-video"
+          src="./banner.mp4"
+          preload="auto"
+          loop
+          muted
+          playsinline
+          webkit-playsinline
+          crossorigin="anonymous"
+        ></video>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <a-entity id="target" mindar-image-target="targetIndex: 0">
+        <a-video
+          src="#banner-video"
+          position="0 0 0.01"
+          width="1"
+          height="0.5625"
+          material="shader: flat"
+        ></a-video>
+      </a-entity>
+    </a-scene>
+
+    <script>
+      const scene = document.querySelector("a-scene");
+      const target = document.querySelector("#target");
+      const video = document.querySelector("#banner-video");
+      const overlay = document.querySelector("#start-overlay");
+      const button = document.querySelector("#start-button");
+      const message = document.querySelector("#message");
+      const guide = document.querySelector("#guide");
+
+      const waitForScene = () =>
+        new Promise((resolve) => {
+          if (scene.hasLoaded) resolve();
+          else scene.addEventListener("loaded", resolve, { once: true });
+        });
+
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        message.textContent = "Spúšťam kameru…";
+
+        try {
+          await waitForScene();
+
+          // Krátke prehratie po dotyku odomkne video aj na iPhone.
+          await video.play();
+          video.pause();
+          video.currentTime = 0;
+
+          await scene.systems["mindar-image-system"].start();
+          overlay.hidden = true;
+          guide.hidden = false;
+        } catch (error) {
+          console.error(error);
+          message.textContent =
+            "Kameru sa nepodarilo spustiť. Skontrolujte povolenie kamery a otvorte stránku cez HTTPS.";
+          button.disabled = false;
+        }
+      });
+
+      target.addEventListener("targetFound", () => {
+        guide.textContent = "Banner rozpoznaný";
+        guide.style.opacity = "0";
+        video.play().catch(() => {});
+      });
+
+      target.addEventListener("targetLost", () => {
+        video.pause();
+        guide.textContent = "Namierte mobil na celý banner";
+        guide.style.opacity = "1";
+      });
+    </script>
+  </body>
+</html>
